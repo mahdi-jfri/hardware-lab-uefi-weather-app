@@ -592,6 +592,7 @@
 #
 ################################################################################
 [Components]
+  WeatherApplication/WeatherApplication.inf
   OvmfPkg/ResetVector/ResetVector.inf
 
   #
