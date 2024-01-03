@@ -9,6 +9,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
 #include "DxeHttpLib.h"
+#include <Library/UefiLib.h>
 
 
 
@@ -1759,6 +1760,13 @@ HttpGenRequestMessage (
   // 3. If we do not have a Request, HeaderCount should be zero
   // 4. If we do not have Request and Headers, we need at least a message-body
   //
+  Print(L"HERE on 1762\n");
+  Print(L"1: %d\n", (Message == NULL || RequestMsg == NULL || RequestMsgSize == NULL));
+  Print(L"2: %d\n", (Message->Data.Request != NULL && Url == NULL));
+  Print(L"3: %d\n", (Message->Data.Request != NULL && Message->HeaderCount == 0));
+  Print(L"4: %d\n", (Message->Data.Request == NULL && Message->HeaderCount != 0));
+  Print(L"5: %d\n", (Message->Data.Request == NULL && Message->HeaderCount != 0));
+  Print(L"6: %d\n", (Message->Data.Request == NULL && Message->HeaderCount == 0 && Message->BodyLength == 0));
   if ((Message == NULL || RequestMsg == NULL || RequestMsgSize == NULL) ||
       (Message->Data.Request != NULL && Url == NULL) ||
       (Message->Data.Request != NULL && Message->HeaderCount == 0) ||
@@ -1766,6 +1774,7 @@ HttpGenRequestMessage (
       (Message->Data.Request == NULL && Message->HeaderCount == 0 && Message->BodyLength == 0)) {
     return EFI_INVALID_PARAMETER;
   }
+  Print(L"HERE on 1776\n");
 
   if (Message->HeaderCount != 0) {
     //
