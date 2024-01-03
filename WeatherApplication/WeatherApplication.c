@@ -323,6 +323,13 @@ UefiMain (
 
     Print(L"Response status code: %d\n", GetResponseCode(ResponseData.StatusCode));
 
+    Status = ServiceBinding->DestroyChild(ServiceBinding, Handle);
+
+    if (EFI_ERROR(Status)) {
+        Print(L"Failed to destroy binding service: %r\n", Status);
+        return Status;
+    }
+
     return EFI_SUCCESS;
 }
 
