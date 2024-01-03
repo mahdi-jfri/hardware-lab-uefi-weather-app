@@ -105,6 +105,7 @@ UefiMain (
     UINTN ContentLength;
     UINTN ContentDownloaded;
     UINTN Index;
+    EFI_STATUS CleanupStatus;
 
     // Locate the HTTP protocol
     Status = gBS->AllocatePool(EfiBootServicesData, BUFFER_SIZE, (VOID **)&Buffer);
@@ -128,7 +129,7 @@ UefiMain (
     Status = gBS->HandleProtocol(Handle, &gEfiHttpProtocolGuid, (VOID **)&Http);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to handle HTTP protocol: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
 
     ConfigData.HttpVersion = HttpVersion11;
@@ -140,12 +141,17 @@ UefiMain (
     IPv4Node.LocalPort = 6349;
     ConfigData.AccessPoint.IPv4Node = &IPv4Node;
 
+    // The HTTP driver must first be configured before requests or responses can
+    // be processed. This is the same for other network protocols such as TCP.
     Status = Http->Configure(Http, &ConfigData);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to configure HTTP driver: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
 
+    // This request message is initialized to request weather information from a
+    // Custom API endpoint. To send the location and get information, we use 
+    // HTTP GET with query parameters.
     RequestData.Url = L"http://httpbin.org/get";
     RequestData.Method = HttpMethodGet;
 
@@ -154,49 +160,70 @@ UefiMain (
     RequestHeaders[1].FieldName = "Accept-Encoding";
     RequestHeaders[1].FieldValue = "identity";
 
+    // Message format just contains a pointer to the request data
+    // and body info, if applicable. In the case of HTTP GET, body
+    // is not relevant.
     RequestMessage.Data.Request = &RequestData;
     RequestMessage.HeaderCount = 2;
     RequestMessage.Headers = RequestHeaders;
     RequestMessage.BodyLength = 0;
     RequestMessage.Body = NULL;
     
+    // Token format is similar to the token format in EFI TCP protocol.
     RequestToken.Event = NULL;
     Status = gBS->CreateEvent(EVT_NOTIFY_SIGNAL, TPL_CALLBACK, RequestCallback, NULL, &RequestToken.Event);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to create event: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
 
     RequestToken.Status = EFI_SUCCESS;
     RequestToken.Message = &RequestMessage;
     gRequestCallbackComplete = FALSE;
 
+    // Finally, make HTTP request.
     Status = Http->Request(Http, &RequestToken);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to send HTTP request: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
 
     Status = gRT->GetTime(&Baseline, NULL);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to get baseline time: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
 
+    // Optionally, wait for a certain amount of time before cancelling
+    // the request. In this case, we'll allow the network stack 10
+    // seconds to send the request successfully.
     for (Timer = 0; !gRequestCallbackComplete && Timer < 10;) {
+        // Give the HTTP driver some motivation...
         Http->Poll(Http);
+        // In practice, a call to GetTime() only fails when the total
+        // elapsed time between the last call to to GetTime() is less
+        // than the resolution of one tick (e.g. 1 second, depending
+        // on capabilities of hardware). We only care to check the time
+        // when the call succeeds.
         if (!EFI_ERROR(gRT->GetTime(&Current, NULL)) && Current.Second != Baseline.Second) {
+            // One second has passed, so update Current time and
+            // increment the counter.
             Baseline = Current;
             ++Timer;
         }
     }
 
+    // Cancel request if we did not get a notification from the HTTP
+    // driver in a timely manner.
     if (!gRequestCallbackComplete) {
         Status = Http->Cancel(Http, &RequestToken);
         Print(L"Request timed out.");
-        return Status;
+        goto Cleanup;
     }
 
+    // This response message is different that request in that the
+    // HTTP driver is responsible for allocating the headers during
+    // a response instead of the caller.
     ResponseData.StatusCode = HTTP_STATUS_UNSUPPORTED_STATUS;
     ResponseMessage.Data.Response = &ResponseData;
     // HeaderCount will be updated by the HTTP driver on response.
@@ -226,12 +253,12 @@ UefiMain (
     Status = Http->Response(Http, &ResponseToken);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to receive HTTP response: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
     Status = gRT->GetTime(&Baseline, NULL);
     if (EFI_ERROR(Status)) {
         Print(L"Failed to get baseline time for response: %r\n", Status);
-        return Status;
+        goto Cleanup;
     }
     // Optionally, wait for a certain amount of time before cancelling.
     for (Timer = 0; !gResponseCallbackComplete && Timer < 10; ) {
@@ -249,7 +276,7 @@ UefiMain (
     if (!gResponseCallbackComplete) {
         Status = Http->Cancel(Http, &ResponseToken);
         Print(L"Response timed out.");
-        return Status;
+        goto Cleanup;
     }
     Print(L"Status Code: %d\n", ResponseData.StatusCode);
     Print(L"Status Code Real: %d\n", GetResponseCode(ResponseData.StatusCode));
@@ -289,12 +316,12 @@ UefiMain (
         Status = Http->Response(Http, &ResponseToken);
         if (EFI_ERROR(Status)) {
             Print(L"Failed to receive HTTP response: %r\n", Status);
-            return Status;
+            goto Cleanup;
         }
         Status = gRT->GetTime(&Baseline, NULL);
         if (EFI_ERROR(Status)) {
             Print(L"Failed to get baseline time for response: %r\n", Status);
-            return Status;
+            goto Cleanup;
         }
         for (Timer = 0; !gResponseCallbackComplete && Timer < 10; ) {
             Http->Poll(Http);
@@ -311,7 +338,7 @@ UefiMain (
         if (!gResponseCallbackComplete) {
             Status = Http->Cancel(Http, &ResponseToken);
             Print(L"Response timed out.");
-            return Status;
+            goto Cleanup;
         }
         // Assuming we successfully received a response...
         ContentDownloaded += ResponseMessage.BodyLength;
@@ -320,16 +347,18 @@ UefiMain (
         }
     }
     Print(L"\n");
-
     Print(L"Response status code: %d\n", GetResponseCode(ResponseData.StatusCode));
+    Status = EFI_SUCCESS;
 
-    Status = ServiceBinding->DestroyChild(ServiceBinding, Handle);
+// Perform necessary cleanups
+Cleanup:
+    CleanupStatus = ServiceBinding->DestroyChild(ServiceBinding, Handle);
 
-    if (EFI_ERROR(Status)) {
-        Print(L"Failed to destroy binding service: %r\n", Status);
-        return Status;
+    if (EFI_ERROR(CleanupStatus)) {
+        Print(L"Failed to destroy binding service: %r\n", CleanupStatus);
+        return CleanupStatus;
     }
 
-    return EFI_SUCCESS;
+    return Status;
 }
 
