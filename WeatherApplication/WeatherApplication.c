@@ -152,13 +152,13 @@ UefiMain (
     // This request message is initialized to request weather information from a
     // Custom API endpoint. To send the location and get information, we use 
     // HTTP GET with query parameters.
-    RequestData.Url = L"http://httpbin.org/get";
+    RequestData.Url = L"http://weather.aghayesefid.ir/weather?location=chicago";
     RequestData.Method = HttpMethodGet;
 
     RequestHeaders[0].FieldName = "Host";
-    RequestHeaders[0].FieldValue = "httpbin.org";
-    RequestHeaders[1].FieldName = "Accept-Encoding";
-    RequestHeaders[1].FieldValue = "identity";
+    RequestHeaders[0].FieldValue = "weather.aghayesefid.ir";
+    RequestHeaders[1].FieldName = "Auth";
+    RequestHeaders[1].FieldValue = "Token";
 
     // Message format just contains a pointer to the request data
     // and body info, if applicable. In the case of HTTP GET, body
