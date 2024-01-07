@@ -128,6 +128,62 @@ VOID EFIAPI SplitString(IN CHAR8 *InputString, IN OUT CHAR8 ***SplitStrings, IN 
     *NumTokens = Count;
 }
 
+VOID EFIAPI PrintClearWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"      \\   /       Description: %a\n", WeatherReport[4]);
+    Print(L"       .-.        Temperature: %a C\n", WeatherReport[0]);
+    Print(L"   -- (   ) --    Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"       `-'        Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"      /   \\       \n\n");
+}
+
+VOID EFIAPI PrintCloudsWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"                  Description: %a\n", WeatherReport[4]);
+    Print(L"       .--.       Temperature: %a C\n", WeatherReport[0]);
+    Print(L"    .-(    ).     Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"   (___.__)__)    Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"                  \n\n");
+}
+
+VOID EFIAPI PrintMistWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"                  Description: %a\n", WeatherReport[4]);
+    Print(L"   _ - _ - _ -    Temperature: %a C\n", WeatherReport[0]);
+    Print(L"    _ - _ - _     Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"   _ - _ - _ -    Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"                  \n\n");
+}
+
+VOID EFIAPI PrintSnowWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"      .-.       Description: %a\n", WeatherReport[4]);
+    Print(L"     (   ).     Temperature: %a C\n", WeatherReport[0]);
+    Print(L"    (___(__)    Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"    * * * *     Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"   * * * *      \n\n");
+}
+
+VOID EFIAPI PrintRainWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"     .-.       Description: %a\n", WeatherReport[4]);
+    Print(L"    (   ).     Temperature: %a C\n", WeatherReport[0]);
+    Print(L"   (___(__)    Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"    , , , ,    Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"   , , , ,     \n\n");
+}
+
+VOID EFIAPI PrintDrizzleWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"     .-.       Description: %a\n", WeatherReport[4]);
+    Print(L"    (   ).     Temperature: %a C\n", WeatherReport[0]);
+    Print(L"   (___(__)    Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"    , , , ,    Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"   , , , ,     \n\n");
+}
+
+VOID EFIAPI PrintThunderstormWeatherReport(IN CHAR8 ** WeatherReport) {
+    Print(L"        .--.	   Description: %a\n", WeatherReport[4]);
+    Print(L"     .-(  __).     Temperature: %a C\n", WeatherReport[0]);
+    Print(L"    (___./ /__)    Humidity: %a %%\n", WeatherReport[2]);
+    Print(L"   ,',',/_ ,','    Wind Speed: %a km/h\n", WeatherReport[1]);
+    Print(L"   ,',', /',','    \n\n");
+}
+
 /**
   as the real entry point for the application.
 
@@ -176,7 +232,7 @@ UefiMain (
     }
     CHAR16 *UnicodeCityName = AllocateZeroPool((AsciiStrLen(CityName) + 1) * sizeof(CHAR16));
     AsciiStrToUnicodeStrS(CityName, UnicodeCityName, (AsciiStrLen(CityName) + 1));
-    Print(L"\nFetching weather info for %s ...\n", UnicodeCityName);
+    Print(L"\nFetching weather info for (%s) ...\n", UnicodeCityName);
 
     // Locate the HTTP protocol
     Status = gBS->AllocatePool(EfiBootServicesData, BUFFER_SIZE, (VOID **)&Buffer);
@@ -233,7 +289,7 @@ UefiMain (
     RequestHeaders[0].FieldName = "Host";
     RequestHeaders[0].FieldValue = "weather.aghayesefid.ir";
     RequestHeaders[1].FieldName = "Auth";
-    RequestHeaders[1].FieldValue = "6be97fd4-188a-4c9a-a778-4f0aec7122f4";
+    RequestHeaders[1].FieldValue = "Token";
 
     // Message format just contains a pointer to the request data
     // and body info, if applicable. In the case of HTTP GET, body
@@ -431,10 +487,22 @@ UefiMain (
         goto Cleanup;
     }
 
-    //TODO: Print results with ascii art.
+    if (!AsciiStrCmp(SplitStrings[3], "thunderstorm"))
+        PrintThunderstormWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "drizzle"))
+        PrintDrizzleWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "rain"))
+        PrintRainWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "snow"))
+        PrintSnowWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "mist"))
+        PrintMistWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "clouds"))
+        PrintCloudsWeatherReport(SplitStrings);
+    else if (!AsciiStrCmp(SplitStrings[3], "clear"))
+        PrintClearWeatherReport(SplitStrings);
 
     for (UINTN i = 0; i < NumTokens; i++) {
-        Print(L"%a\n", SplitStrings[i]);
         FreePool(SplitStrings[i]);  // Free allocated memory for each substring
     }
 
