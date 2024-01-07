@@ -250,9 +250,6 @@ EfiHttpRequest (
   UINTN                         RequestMsgSize;
   EFI_HANDLE                    ImageHandle;
 
-  Print(L"HERE\n");
-  Print(L"HERE bavaram nemishe\n");
-
   //
   // Initializations
   //
@@ -330,7 +327,6 @@ EfiHttpRequest (
     Configure   = FALSE;
     ReConfigure = FALSE;
   } else {
-    Print(L"HERE on 333\n");
     //
     // Check whether the token already existed.
     //
@@ -361,7 +357,6 @@ EfiHttpRequest (
     //
     HttpInstance->UseHttps = IsHttpsUrl (Url);
 
-    Print(L"HERE on 364\n");
     //
     // HTTP is disabled, return directly if the URI is not HTTPS.
     //
@@ -372,7 +367,6 @@ EfiHttpRequest (
       return EFI_ACCESS_DENIED;
     }
 
-    Print(L"HERE on 375\n");
     //
     // Check whether we need to create Tls child and open the TLS protocol.
     //
@@ -399,19 +393,16 @@ EfiHttpRequest (
       TlsConfigure = TRUE;
     }
 
-    Print(L"HERE on 402\n");
     UrlParser = NULL;
     Status = HttpParseUrl (Url, (UINT32) AsciiStrLen (Url), FALSE, &UrlParser);
     if (EFI_ERROR (Status)) {
       goto Error1;
     }
-    Print(L"HERE on 408\n");
 
     Status = HttpUrlGetHostName (Url, UrlParser, &HostName);
     if (EFI_ERROR (Status)) {
       goto Error1;
     }
-    Print(L"HERE on 414\n");
 
     if (HttpInstance->LocalAddressIsIPv6) {
       HostNameSize = AsciiStrSize (HostName);
@@ -425,7 +416,6 @@ EfiHttpRequest (
         HostName[HostNameSize - 1] = '\0';
       }
     }
-    Print(L"HERE on 428\n");
 
     Status = HttpUrlGetPort (Url, UrlParser, &RemotePort);
     if (EFI_ERROR (Status)) {
@@ -435,7 +425,6 @@ EfiHttpRequest (
         RemotePort = HTTP_DEFAULT_PORT;
       }
     }
-    Print(L"HERE on 438\n");
     //
     // If Configure is TRUE, it indicates the first time to call Request();
     // If ReConfigure is TRUE, it indicates the request URL is not same
@@ -470,7 +459,6 @@ EfiHttpRequest (
             Status = EFI_OUT_OF_RESOURCES;
             goto Error1;
           }
-          Print(L"HERE on 473\n");
 
           Wrap->HttpToken    = Token;
           Wrap->HttpInstance = HttpInstance;
@@ -515,9 +503,7 @@ EfiHttpRequest (
     }
   }
 
-  Print(L"HERE on 518\n");
   if (Configure) {
-    Print(L"HERE on 520\n");
     //
     // Parse Url for IPv4 or IPv6 address, if failed, perform DNS resolution.
     //
@@ -559,7 +545,6 @@ EfiHttpRequest (
   }
 
   if (ReConfigure) {
-    Print(L"HERE on 562\n");
     //
     // The request URL is different from previous calls to Request(), close existing TCP instance.
     //
@@ -582,7 +567,6 @@ EfiHttpRequest (
     EfiHttpCancel (This, NULL);
   }
 
-  Print(L"HERE on 585\n");
   //
   // Wrap the HTTP token in HTTP_TOKEN_WRAP
   //
@@ -597,8 +581,6 @@ EfiHttpRequest (
   if (Request != NULL) {
     Wrap->TcpWrap.Method = Request->Method;
   }
-
-  Print(L"HERE on 601\n");
   Status = HttpInitSession (
              HttpInstance,
              Wrap,
@@ -609,7 +591,6 @@ EfiHttpRequest (
     goto Error2;
   }
 
-  Print(L"HERE on 612\n");
   if (!Configure && !ReConfigure && !TlsConfigure) {
     //
     // For the new HTTP token, create TX TCP token events.
@@ -620,7 +601,6 @@ EfiHttpRequest (
     }
   }
 
-  Print(L"HERE on 623\n");
   //
   // Create request message.
   //
@@ -643,14 +623,12 @@ EfiHttpRequest (
     }
   }
 
-  Print(L"HERE on 646\n");
   Status = HttpGenRequestMessage (HttpMsg, FileUrl, &RequestMsg, &RequestMsgSize);
 
   if (EFI_ERROR (Status) || NULL == RequestMsg) {
     goto Error3;
   }
 
-  Print(L"HERE on 653\n");
   //
   // Every request we insert a TxToken and a response call would remove the TxToken.
   // In cases of PUT/POST/PATCH, after an initial request-response pair, we would do a
@@ -664,7 +642,6 @@ EfiHttpRequest (
     }
   }
 
-  Print(L"HERE on 667\n");
   //
   // Transmit the request message.
   //
@@ -691,7 +668,6 @@ EfiHttpRequest (
   return EFI_SUCCESS;
 
 Error5:
-  Print(L"HERE on Error5\n");
   //
   // We would have inserted a TxToken only if Request structure is not NULL.
   // Hence check before we do a remove in this error case.
@@ -701,20 +677,17 @@ Error5:
   }
 
 Error4:
-  Print(L"HERE on Error4\n");
   if (RequestMsg != NULL) {
     FreePool (RequestMsg);
   }
 
 Error3:
-  Print(L"HERE on Error3\n");
   if (HttpInstance->UseHttps) {
     TlsCloseSession (HttpInstance);
     TlsCloseTxRxEvent (HttpInstance);
   }
 
 Error2:
-  Print(L"HERE on Error2\n");
   HttpCloseConnection (HttpInstance);
 
   HttpCloseTcpConnCloseEvent (HttpInstance);
@@ -728,7 +701,6 @@ Error2:
   }
 
 Error1:
-  Print(L"HERE on Error1\n");
   if (HostName != NULL) {
     FreePool (HostName);
   }

@@ -93,6 +93,41 @@ RETURN_STATUS EFIAPI GetInputCityName(IN OUT CHAR8 *InputString) {
     return RETURN_SUCCESS;
 }
 
+VOID EFIAPI SplitString(IN CHAR8 *InputString, IN OUT CHAR8 ***SplitStrings, IN OUT UINT8 *NumTokens) {
+    CHAR8 *Token;
+    CHAR8 *Rest = InputString;
+    UINTN Count = 0;
+
+    while (*Rest != '\0') {
+        Token = Rest;
+        while (*Token != ',' && *Token != '\0') {
+            Token++;
+        }
+
+        Count++;
+        if (*Token == ',') {
+            *Token = '\0';  // Null-terminate the substring
+            Rest = Token + 1;  // Move past the delimiter
+        } else {
+            Rest = Token;  // Reached the end of the string
+        }
+    }
+
+    // Allocate memory for the array of pointers
+    *SplitStrings = (CHAR8 **) AllocateZeroPool(Count * sizeof(CHAR8*));
+    if (*SplitStrings == NULL)
+        return;
+
+    // Tokenize the string and store the pointers in the array
+    Rest = InputString;
+    for (UINTN i = 0; i < Count; i++) {
+        (*SplitStrings)[i] = (CHAR8 *) AllocateCopyPool(AsciiStrSize(Rest)+1, Rest);
+        Rest += AsciiStrLen(Rest) + 1;  // Move to the next substring
+    }
+
+    *NumTokens = Count;
+}
+
 /**
   as the real entry point for the application.
 
@@ -141,6 +176,7 @@ UefiMain (
     }
     CHAR16 *UnicodeCityName = AllocateZeroPool((AsciiStrLen(CityName) + 1) * sizeof(CHAR16));
     AsciiStrToUnicodeStrS(CityName, UnicodeCityName, (AsciiStrLen(CityName) + 1));
+    Print(L"\nFetching weather info for %s ...\n", UnicodeCityName);
 
     // Locate the HTTP protocol
     Status = gBS->AllocatePool(EfiBootServicesData, BUFFER_SIZE, (VOID **)&Buffer);
@@ -191,14 +227,13 @@ UefiMain (
     CHAR16 *WeatherURL = AllocateZeroPool(WeatherUrlSize);
     StrCatS(WeatherURL, WeatherUrlSize, BaseWeatherUrl);
     StrCatS(WeatherURL, WeatherUrlSize, UnicodeCityName);
-    Print(L"%s\n", WeatherURL);
     RequestData.Url = WeatherURL;
     RequestData.Method = HttpMethodGet;
 
     RequestHeaders[0].FieldName = "Host";
     RequestHeaders[0].FieldValue = "weather.aghayesefid.ir";
     RequestHeaders[1].FieldName = "Auth";
-    RequestHeaders[1].FieldValue = "Token";
+    RequestHeaders[1].FieldValue = "6be97fd4-188a-4c9a-a778-4f0aec7122f4";
 
     // Message format just contains a pointer to the request data
     // and body info, if applicable. In the case of HTTP GET, body
@@ -318,8 +353,6 @@ UefiMain (
         Print(L"Response timed out.");
         goto Cleanup;
     }
-    Print(L"Status Code: %d\n", ResponseData.StatusCode);
-    Print(L"Status Code Real: %d\n", GetResponseCode(ResponseData.StatusCode));
     
     for (Index = 0; Index < ResponseMessage.HeaderCount; ++Index) {
         // We can parse the length of the file from the ContentLength header.
@@ -328,21 +361,14 @@ UefiMain (
         }
     }
 
-    Print(L"Content Length: %d\n", ContentLength);
-    for(Index = 0; Index < ResponseMessage.BodyLength; ++Index) {
-        Print(L"%c", Buffer[Index]);
-    }
-
+    // You can comment out this part to the end of while loop if you don't
+    // need to download data from this API.
     ContentDownloaded = ResponseMessage.BodyLength;
 
     while (ContentDownloaded < ContentLength) {
         // If we make it here, we haven't yet downloaded the whole file and
         // need to keep going.
         ResponseMessage.Data.Response = NULL;
-        if (ResponseMessage.Headers != NULL) {
-            // No sense hanging onto this anymore.
-            // gBS->FreePool(ResponseMessage.Headers);
-        }
         ResponseMessage.HeaderCount = 0;
         ResponseMessage.BodyLength = BUFFER_SIZE;
         ZeroMem(Buffer, BUFFER_SIZE);
@@ -387,8 +413,32 @@ UefiMain (
         }
     }
     Print(L"\n");
-    Print(L"Response status code: %d\n", GetResponseCode(ResponseData.StatusCode));
     Status = EFI_SUCCESS;
+
+    if (GetResponseCode(ResponseData.StatusCode) != 200) {
+        Print(L"There was an error in fetching the weather data: %d\n", GetResponseCode(ResponseData.StatusCode));
+        goto Cleanup;
+    }
+
+    CHAR8 **SplitStrings;
+    UINT8 NumTokens;
+    Buffer[ResponseMessage.BodyLength-1] = 0;
+    Buffer++;
+    SplitString((CHAR8 *)Buffer, &SplitStrings, &NumTokens);
+
+    if (SplitStrings == NULL) {
+        Print(L"There was an error in splitting the fetched data.\n");
+        goto Cleanup;
+    }
+
+    //TODO: Print results with ascii art.
+
+    for (UINTN i = 0; i < NumTokens; i++) {
+        Print(L"%a\n", SplitStrings[i]);
+        FreePool(SplitStrings[i]);  // Free allocated memory for each substring
+    }
+
+    FreePool(SplitStrings);
 
 // Perform necessary cleanups
 Cleanup:
