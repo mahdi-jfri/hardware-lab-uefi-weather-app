@@ -4,6 +4,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Library/MemoryAllocationLib.h>
 #include <Protocol/Http.h>
 #include <Protocol/ServiceBinding.h>
 
@@ -68,6 +69,30 @@ UINTN GetResponseCode(EFI_HTTP_STATUS_CODE code) {
     }
 }
 
+RETURN_STATUS EFIAPI GetInputCityName(IN OUT CHAR8 *InputString) {
+    UINTN Idx;
+    UINT8 i = 0;
+    EFI_INPUT_KEY Key;
+    
+    Print(L"Please Enter the city name (Max 32 chars): ");
+    while (i < 32) {
+        gBS->WaitForEvent(1, &(gST->ConIn->WaitForKey), &Idx);
+        gST->ConIn->ReadKeyStroke(gST->ConIn, &Key);
+
+        if (Key.UnicodeChar == CHAR_CARRIAGE_RETURN)
+            break;
+        InputString[i] = (CHAR8) Key.UnicodeChar;
+        i++;
+    }
+    InputString[i] = 0;
+    gST->ConIn->Reset(gST->ConIn, FALSE);
+
+    if (i == 0)
+        return RETURN_INVALID_PARAMETER;
+
+    return RETURN_SUCCESS;
+}
+
 /**
   as the real entry point for the application.
 
@@ -99,6 +124,7 @@ UefiMain (
     EFI_HTTP_MESSAGE ResponseMessage;
     EFI_HTTP_TOKEN ResponseToken;
     UINT8 *Buffer;
+    CHAR16 *BaseWeatherUrl = L"http://weather.aghayesefid.ir/weather?location=";
     EFI_TIME Baseline;
     EFI_TIME Current;
     UINTN Timer;
@@ -106,6 +132,15 @@ UefiMain (
     UINTN ContentDownloaded;
     UINTN Index;
     EFI_STATUS CleanupStatus;
+
+    CHAR8 *CityName = AllocateZeroPool(33 * sizeof(CHAR8));
+    if(RETURN_ERROR(GetInputCityName(CityName))) {
+        Print(L"You should enter a valid city name.\n");
+        FreePool(CityName);
+        return EFI_SUCCESS;
+    }
+    CHAR16 *UnicodeCityName = AllocateZeroPool((AsciiStrLen(CityName) + 1) * sizeof(CHAR16));
+    AsciiStrToUnicodeStrS(CityName, UnicodeCityName, (AsciiStrLen(CityName) + 1));
 
     // Locate the HTTP protocol
     Status = gBS->AllocatePool(EfiBootServicesData, BUFFER_SIZE, (VOID **)&Buffer);
@@ -152,7 +187,12 @@ UefiMain (
     // This request message is initialized to request weather information from a
     // Custom API endpoint. To send the location and get information, we use 
     // HTTP GET with query parameters.
-    RequestData.Url = L"http://weather.aghayesefid.ir/weather?location=chicago";
+    UINTN WeatherUrlSize = StrSize(BaseWeatherUrl) + StrSize(UnicodeCityName) + 1;
+    CHAR16 *WeatherURL = AllocateZeroPool(WeatherUrlSize);
+    StrCatS(WeatherURL, WeatherUrlSize, BaseWeatherUrl);
+    StrCatS(WeatherURL, WeatherUrlSize, UnicodeCityName);
+    Print(L"%s\n", WeatherURL);
+    RequestData.Url = WeatherURL;
     RequestData.Method = HttpMethodGet;
 
     RequestHeaders[0].FieldName = "Host";
@@ -359,6 +399,9 @@ Cleanup:
         return CleanupStatus;
     }
 
+    FreePool(CityName);
+    FreePool(UnicodeCityName);
+    FreePool(WeatherURL);
     return Status;
 }
 
